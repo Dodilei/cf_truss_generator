@@ -1,5 +1,7 @@
 from materials.composite_engine import default_carbon_epoxy_ud
 import numpy as np
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import spsolve
 import materials.failure_criteria as fc
 
 ksign = np.array([[1, -1], [-1, 1]]).repeat(3, axis=0).repeat(3, axis=1)
@@ -48,17 +50,13 @@ class FEMSystem:
         )
         k = np.tile(k_block, (1, 2, 2)) * ksign
 
-        n_el = len(element_area)
-        K_stack = np.zeros((n_el, n_dofs, n_dofs))
+        # Vectorized generation of row and column indices for sparse assembly
+        dofs_indices = np.outer(dofs, np.ones(6)).reshape(-1, 6, 6).astype(int)
+        rows = dofs_indices.flatten()
+        cols = dofs_indices.transpose((0, 2, 1)).flatten()
+        data = k.flatten()
 
-        dofs_xy = np.outer(dofs, np.ones((1, 6))).reshape(*dofs.shape, 6).astype(int)
-        idx_el = (
-            np.outer(np.arange(n_el), np.ones((1, 6, 6))).reshape(-1, 6, 6).astype(int)
-        )
-
-        K_stack[idx_el, dofs_xy, dofs_xy.transpose((0, 2, 1))] = k
-
-        self.K_global = K_stack.sum(axis=0)
+        self.K_global = coo_matrix((data, (rows, cols)), shape=(n_dofs, n_dofs)).tocsr()
 
     def assemble_F_global(self, load_nodes, load_magnitudes):
         F_global = np.zeros(self.n_dofs)
@@ -85,7 +83,7 @@ class FEMSystem:
         unconstrained_mask[constrained_dofs] = False
         unconstrained = np.arange(n_dofs)[unconstrained_mask]
 
-        self.K_reduced = self.K_global[np.ix_(unconstrained, unconstrained)]
+        self.K_reduced = self.K_global[unconstrained, :][:, unconstrained]
         self.F_reduced = self.F_global[unconstrained]
         self.unconstrained = unconstrained
 
@@ -101,7 +99,7 @@ class FEMSystem:
                 "Sistema não foi corretamente inicializado. Garanta que K_red, F_red e unconstrained foram definidos."
             )
 
-        U_reduced = np.linalg.solve(self.K_reduced, self.F_reduced)
+        U_reduced = spsolve(self.K_reduced, self.F_reduced)
         U_global = np.zeros(self.n_dofs)
         U_global[self.unconstrained] = U_reduced
 

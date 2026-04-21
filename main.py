@@ -1,11 +1,11 @@
 # truss_framework.py
 from core.fem import PostProcessor
-from scripts.cases import solve_case
-from scripts.cases import create_load_case
-from scripts.cases import solve_design
-from utils.visual import plot_deformed_truss_overlaid
-from utils.visual import plot_stress_and_buckling
-from utils.visual import plot_structure_with_constraints_and_loads
+from scripts.cases import solve_case, create_load_case, solve_design
+from utils.visual import (
+    plot_deformed_truss_overlaid,
+    plot_stress_and_buckling,
+    plot_structure_with_constraints_and_loads,
+)
 import numpy as np
 import matplotlib.pyplot as plt
 import materials.composite_engine as comp
@@ -21,7 +21,6 @@ from scripts.run_article import (
 
 from utils.reporting import (
     print_sections,
-    node_incident_force_stats,
     print_nodes_table,
 )
 
@@ -40,9 +39,12 @@ np.set_printoptions(suppress=False)
 
 RUN_PSO = True
 ARTICLE_MODE = True
-N_RUNS = 5
+N_RUNS = 2
+N_PARTICLES = 30
+N_ITER = 100
 SEED_SINGLE = 42
 SHOW_ARTICLE_PLOTS = False
+SHOW_PBAR = True
 VISUALIZE_CRIT = False
 
 MANUAL_BEST_POSITION = np.array([])  # 9 vars se RUN_PSO=False
@@ -131,8 +133,8 @@ def main():
     if RUN_PSO:
         if ARTICLE_MODE:
             pso_kwargs = dict(
-                num_particles=10,
-                max_iterations=30,
+                num_particles=N_PARTICLES,
+                max_iterations=N_ITER,
                 w_inertia=0.9,
                 w_min=0.4,
                 inertia_scheme="nonlinear",
@@ -147,7 +149,7 @@ def main():
                 bounds,
                 pso_kwargs,
                 var_names,
-                verbose=True,
+                verbose=SHOW_PBAR,
                 plot=SHOW_ARTICLE_PLOTS,
             )
 
@@ -156,15 +158,15 @@ def main():
                 objective_function,
                 dimensions,
                 bounds,
-                num_particles=10,
-                max_iterations=100,
+                num_particles=N_PARTICLES,
+                max_iterations=N_ITER,
                 w_inertia=0.9,
                 w_min=0.4,
                 inertia_scheme="nonlinear",
                 c1_cogn=1.4,
                 c2_soc=1.8,
             )
-            best_position, best_value = pso.optimize(verbose=True)
+            best_position, best_value = pso.optimize(verbose=SHOW_PBAR)
 
             print("\nOptimization Complete!")
             print(f"Best found position: {best_position}")

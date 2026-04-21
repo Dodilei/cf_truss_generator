@@ -1,14 +1,6 @@
 import numpy as np
 from tqdm import tqdm
-
-
-class Particle:
-    def __init__(self, dimensions, low_bounds, up_bounds, vmin, vmax):
-        self.position = np.random.uniform(low_bounds, up_bounds, size=dimensions)
-        self.velocity = np.random.uniform(vmin, vmax, size=dimensions)
-        self.current_value = np.inf
-        self.pbest_position = self.position.copy()
-        self.pbest_value = np.inf
+import concurrent.futures
 
 
 class PSO:
@@ -24,6 +16,7 @@ class PSO:
         inertia_scheme="nonlinear",
         c1_cogn=1.4,
         c2_soc=1.8,
+        n_workers=None,
         initialize=True,
     ):
 
@@ -39,6 +32,7 @@ class PSO:
 
         self.c1_cogn = c1_cogn
         self.c2_soc = c2_soc
+        self.n_workers = n_workers
 
         self.low_bounds = np.array([b[0] for b in bounds])
         self.up_bounds = np.array([b[1] for b in bounds])
@@ -59,14 +53,25 @@ class PSO:
             self.initialize()
 
     def initialize(self, seed=None):
-        if seed:
+        if seed is not None:
             np.random.seed(seed)
-        self.particles = [
-            Particle(self.dimensions, self.low_bounds, self.up_bounds, self.vmin, self.vmax)
-            for _ in range(self.num_particles)
-        ]
 
-        self._evaluate_swarm()
+        self.positions = np.random.uniform(
+            self.low_bounds, self.up_bounds, size=(self.num_particles, self.dimensions)
+        )
+        self.velocities = np.random.uniform(
+            self.vmin, self.vmax, size=(self.num_particles, self.dimensions)
+        )
+        self.pbest_positions = self.positions.copy()
+        self.pbest_values = np.full(self.num_particles, np.inf)
+        self.current_values = np.full(self.num_particles, np.inf)
+
+        # One-off evaluation for initialization without an external executor context
+        if self.n_workers is not None and self.n_workers > 1 or self.n_workers is None:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_workers) as executor:
+                self._evaluate_swarm(executor)
+        else:
+            self._evaluate_swarm()
 
     def _current_inertia(self, it):
         if self.inertia_scheme == "constant" or self.max_iterations <= 1:
@@ -79,19 +84,24 @@ class PSO:
             return self.w_min + (self.w_initial - self.w_min) * (tau**2)
         return self.w_initial
 
-    def _evaluate_swarm(self):
-        values = np.empty(self.num_particles, dtype=float)
-        for i, p in enumerate(self.particles):
-            v = self.objective_function(p.position)
-            p.current_value = v
-            values[i] = v
-            if v < p.pbest_value:
-                p.pbest_value = v
-                p.pbest_position = p.position.copy()
+    def _evaluate_swarm(self, executor=None):
+        if executor is not None:
+            results = list(executor.map(self.objective_function, self.positions))
+        else:
+            results = [self.objective_function(pos) for pos in self.positions]
+
+        for i, v in enumerate(results):
+            self.current_values[i] = v
+
+            if v < self.pbest_values[i]:
+                self.pbest_values[i] = v
+                self.pbest_positions[i] = self.positions[i].copy()
+
             if v < self.gbest_value:
                 self.gbest_value = v
-                self.gbest_position = p.position.copy()
-        return values
+                self.gbest_position = self.positions[i].copy()
+
+        return self.current_values
 
     def optimize(self, verbose=False):
         iterator = range(self.max_iterations)
@@ -101,36 +111,50 @@ class PSO:
             print(f"  Number of iterations: {self.max_iterations}")
             print(f"  Cognitive coefficient: {self.c1_cogn}")
             print(f"  Social coefficient: {self.c2_soc}")
+            print(f"  Workers (threads): {self.n_workers if self.n_workers else 'Auto'}")
             print()
             iterator = tqdm(iterator, desc="PSO Progress", unit="it", colour="BLUE")
 
-        for it in iterator:
-            w_curr = self._current_inertia(it)
-            for p in self.particles:
-                r1 = np.random.rand(self.dimensions)
-                r2 = np.random.rand(self.dimensions)
-                cognitive = self.c1_cogn * r1 * (p.pbest_position - p.position)
-                social = self.c2_soc * r2 * (self.gbest_position - p.position)
-                p.velocity = w_curr * p.velocity + cognitive + social
-                p.velocity = np.clip(p.velocity, self.vmin, self.vmax)
-                p.position = np.clip(p.position + p.velocity, self.low_bounds, self.up_bounds)
-
-            values = self._evaluate_swarm()
-
-            self.mean_value_history[it] = np.mean(values)
-            self.gbest_value_history[it] = self.gbest_value
-
-            pos = np.array([pp.position for pp in self.particles])
-            centroid = pos.mean(axis=0)
-            diversity = np.mean(np.linalg.norm(pos - centroid, axis=1))
-            self.diversity_history[it] = diversity
-
-            if verbose:
-                iterator.set_postfix(
-                    {"best": f"{self.gbest_value:.4e}", "div": f"{diversity:.2e}"}
-                )
-
+        if self.n_workers is not None and self.n_workers <= 1:
+            # Run sequentially
+            for it in iterator:
+                self._optimize_step(it, iterator, verbose)
+        else:
+            # Run with thread pool
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_workers) as executor:
+                for it in iterator:
+                    self._optimize_step(it, iterator, verbose, executor)
+            
         return self.gbest_position, self.gbest_value
+
+    def _optimize_step(self, it, iterator, verbose, executor=None):
+        w_curr = self._current_inertia(it)
+
+        r1 = np.random.rand(self.num_particles, self.dimensions)
+        r2 = np.random.rand(self.num_particles, self.dimensions)
+
+        cognitive = self.c1_cogn * r1 * (self.pbest_positions - self.positions)
+        social = self.c2_soc * r2 * (self.gbest_position - self.positions)
+
+        self.velocities = w_curr * self.velocities + cognitive + social
+        self.velocities = np.clip(self.velocities, self.vmin, self.vmax)
+        self.positions = np.clip(
+            self.positions + self.velocities, self.low_bounds, self.up_bounds
+        )
+
+        values = self._evaluate_swarm(executor)
+
+        self.mean_value_history[it] = np.mean(values)
+        self.gbest_value_history[it] = self.gbest_value
+
+        centroid = self.positions.mean(axis=0)
+        diversity = np.mean(np.linalg.norm(self.positions - centroid, axis=1))
+        self.diversity_history[it] = diversity
+
+        if verbose:
+            iterator.set_postfix(
+                {"best": f"{self.gbest_value:.4e}", "div": f"{diversity:.2e}"}
+            )
 
 
 class PSOEnsemble:
@@ -146,6 +170,7 @@ class PSOEnsemble:
         inertia_scheme="nonlinear",
         c1_cogn=1.4,
         c2_soc=1.8,
+        n_workers=None,
         n_runs=1,
     ):
 
@@ -160,6 +185,7 @@ class PSOEnsemble:
             inertia_scheme,
             c1_cogn,
             c2_soc,
+            n_workers=n_workers,
             initialize=False,
         )
 
@@ -180,10 +206,6 @@ class PSOEnsemble:
         for i in range(self.n_runs):
             self.pso_solver.initialize(seed=i)
             self.pso_solver.optimize(verbose=verbose)
-
-            print(self.pso_solver.gbest_value_history.shape)
-            print(self.pso_solver.mean_value_history.shape)
-            print(self.pso_solver.diversity_history.shape)
 
             self.rbest_position[i] = self.pso_solver.gbest_position
             self.rbest_value[i] = self.pso_solver.gbest_value
