@@ -1,8 +1,8 @@
-from composite_engine import default_carbon_epoxy_ud
+from materials.composite_engine import default_carbon_epoxy_ud
 import numpy as np
-import failure_criteria as fc
+import materials.failure_criteria as fc
 
-ksign = np.array([[1, -1], [-1, 1]], dtype=float).repeat(3, axis=0).repeat(3, axis=1)
+ksign = np.array([[1, -1], [-1, 1]]).repeat(3, axis=0).repeat(3, axis=1)
 
 
 class FEMSystem:
@@ -49,7 +49,7 @@ class FEMSystem:
         k = np.tile(k_block, (1, 2, 2)) * ksign
 
         n_el = len(element_area)
-        K_stack = np.zeros((n_el, n_dofs, n_dofs), dtype=float)
+        K_stack = np.zeros((n_el, n_dofs, n_dofs))
 
         dofs_xy = np.outer(dofs, np.ones((1, 6))).reshape(*dofs.shape, 6).astype(int)
         idx_el = (
@@ -61,7 +61,7 @@ class FEMSystem:
         self.K_global = K_stack.sum(axis=0)
 
     def assemble_F_global(self, load_nodes, load_magnitudes):
-        F_global = np.zeros(int(self.n_dofs), dtype=float)
+        F_global = np.zeros(self.n_dofs)
         if len(load_nodes):
             F_global[3 * load_nodes[:, 0] + load_nodes[:, 1]] = load_magnitudes
 
@@ -81,9 +81,9 @@ class FEMSystem:
             3 * fixed_nodes.reshape(-1, 1) + np.array([0, 1, 2]).reshape(1, 3)
         )[constraints].astype(int)
 
-        unconstrained_mask = np.ones(int(n_dofs), dtype=bool)
+        unconstrained_mask = np.ones(n_dofs, dtype=bool)
         unconstrained_mask[constrained_dofs] = False
-        unconstrained = np.arange(int(n_dofs))[unconstrained_mask]
+        unconstrained = np.arange(n_dofs)[unconstrained_mask]
 
         self.K_reduced = self.K_global[np.ix_(unconstrained, unconstrained)]
         self.F_reduced = self.F_global[unconstrained]
@@ -102,8 +102,8 @@ class FEMSystem:
             )
 
         U_reduced = np.linalg.solve(self.K_reduced, self.F_reduced)
-        U_global = np.zeros(int(self.n_dofs), dtype=float)
-        U_global[np.asarray(self.unconstrained, dtype=int)] = U_reduced
+        U_global = np.zeros(self.n_dofs)
+        U_global[self.unconstrained] = U_reduced
 
         self.U_global = U_global
         return U_global
@@ -188,9 +188,9 @@ class PostProcessor:
         element_area = self.truss.element_area
 
         Ue = self.U_global[self.dofs].reshape(-1, 2, 3)
-        du = (Ue * np.array([1.0, -1.0]).reshape(1, 2, 1)).sum(axis=1)
+        du_diff = (Ue * np.array([1.0, -1.0]).reshape(1, 2, 1)).sum(axis=1)
 
-        strain = np.sum(du * dxyz, axis=1) / (element_length**2)
+        strain = np.sum(du_diff * dxyz, axis=1) / (element_length**2)
         axial_stresses = self.E_eff * strain
         axial_forces = element_area * axial_stresses
 

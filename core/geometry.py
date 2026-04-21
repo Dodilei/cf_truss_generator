@@ -2,7 +2,7 @@ import numpy as np
 
 SECTION_NUMBER = 5
 
-UNIT_Z = np.array([0.0, 0.0, 1.0], dtype=float)
+UNIT_Z = np.array([0.0, 0.0, 1.0])
 
 
 class SquareProfile:
@@ -16,7 +16,7 @@ class SquareProfile:
             [1, 0, 0],
         ],
         dtype=float,
-    ) - np.array([0.5, 0.5, 0.0], dtype=float)
+    ) - np.array([0.5, 0.5, 0.0])
 
     node_conn = np.array(
         [
@@ -50,7 +50,7 @@ class Geometry:
         self.total_length = total_length
         self.profile = profile
 
-        zdist = (np.arange(zdiv) / (zdiv - 1)) ** float(zexp)
+        zdist = (np.arange(zdiv) / (zdiv - 1)) ** zexp
 
         nodes = []
         elements = []

@@ -1,27 +1,30 @@
 # truss_framework.py
-from fem import PostProcessor
-from cases import solve_case
-from cases import create_load_case
-from cases import solve_design
-from visual import plot_deformed_truss_overlaid
-from visual import plot_stress_and_buckling
-from visual import plot_structure_with_constraints_and_loads
+from core.fem import PostProcessor
+from scripts.cases import solve_case
+from scripts.cases import create_load_case
+from scripts.cases import solve_design
+from utils.visual import plot_deformed_truss_overlaid
+from utils.visual import plot_stress_and_buckling
+from utils.visual import plot_structure_with_constraints_and_loads
 import numpy as np
 import matplotlib.pyplot as plt
-import composite_engine as comp
+import materials.composite_engine as comp
 
 from optimizer.pso import PSO
-from visual import (
+from utils.visual import (
     plot_single_convergence,
 )
 
-from run_article import (
+from scripts.run_article import (
     run_article_mode,
 )
 
-# =========================
-# COMPOSITE / LAMINATE
-# =========================
+from utils.reporting import (
+    print_sections,
+    node_incident_force_stats,
+    print_nodes_table,
+)
+
 
 LAYUP_SPEC = {
     "fractions": {0: 0.50, 45: 0.25, -45: 0.25, 90: 0.0},
@@ -30,49 +33,38 @@ LAYUP_SPEC = {
     "symmetric": True,
 }
 
-# =========================
-# NUMPY SETTINGS
-# =========================
+
 np.seterr(divide="ignore", invalid="ignore")
 np.set_printoptions(suppress=False)
 
-# =========================
-# RUN CONFIG
-# =========================
+
 RUN_PSO = True
 ARTICLE_MODE = True
 N_RUNS = 5
 SEED_SINGLE = 42
-SHOW_ARTICLE_PLOTS = True
-VISUALIZE_CRIT = True
+SHOW_ARTICLE_PLOTS = False
+VISUALIZE_CRIT = False
 
-MANUAL_BEST_POSITION = np.array([], dtype=float)  # 9 vars se RUN_PSO=False
+MANUAL_BEST_POSITION = np.array([])  # 9 vars se RUN_PSO=False
 
-# =========================
-# CONSTANTES / MATERIAIS
-# =========================
+
 RHO = 2000.0  # kg/m3 (membros)
 TOTAL_LENGTH = 0.85  # m
 LOAD_MAG = 60.0  # N (base)
 
-# =========================
-# COMPOSITE / LAMINATE
-# =========================
+
 UD = comp.default_carbon_epoxy_ud()
 
 LAM_PROPS = comp.tube_EG_from_layup_spec(LAYUP_SPEC, UD)
-E_LAM = float(LAM_PROPS["Ex"])
-G_LAM = float(LAM_PROPS["Gxy"])
+E_LAM = LAM_PROPS["Ex"]
+G_LAM = LAM_PROPS["Gxy"]
 
 E_EFF = E_LAM
 
 # Set random seed
-np.random.seed(int(SEED_SINGLE))
+np.random.seed(SEED_SINGLE)
 
 
-# =========================
-# BOUNDS
-# =========================
 bounds = [
     (0.02, 0.15),  # base_scale
     (0.2, 1.0),  # taper_ratio
@@ -88,9 +80,6 @@ var_names = ["base_scale", "taper_ratio", "zexp", "D1", "D2", "D3", "dd1", "dd2"
 dimensions = len(bounds)
 
 
-# =========================
-# OBJECTIVE
-# =========================
 def objective_function(X):
 
     p1, p2, p3, p4, p5, p6, p7, p8, p9 = X
@@ -119,87 +108,22 @@ def objective_function(X):
     if not feasible:
         return np.inf
 
-    return float(np.exp(metrics["max_def"]) * fem_system.total_mass)
+    return np.exp(metrics["max_def"]) * fem_system.total_mass
 
 
 def translate_params(p1, p2, p3, p4, p5, p6, p7, p8, p9):
-    z = (np.arange(5) / 4.0) ** float(p3)
-    do = [float(p4), float(p5), float(p6)]
-    di = [float(p4 - p7), float(p5 - p8), float(p6 - p9)]
+    z = (np.arange(5) / 4.0) ** p3
+    do = [p4, p5, p6]
+    di = [p4 - p7, p5 - p8, p6 - p9]
     return (
-        float(p1),  # base_scale
-        float(p2),  # taper_ratio
+        p1,  # base_scale
+        p2,  # taper_ratio
         z,  # z_spacings
         do,  # diam_o
         di,  # diam_i
     )
 
 
-def print_sections(diam_o, diam_i):
-    tube_position = ["Secondary element", "Primary element", "Diagonal element"]
-    for desc, do, di in zip(tube_position, diam_o, diam_i):
-        if di > 0.0:
-            print(
-                f"{desc} = Tube, diameter: {1000 * do:.2f} mm | thickness: {500 * (do - di):.2f} mm"
-            )
-        else:
-            print(f"{desc} = Rod, diameter: {1000 * do:.2f} mm")
-    print()
-
-
-def node_incident_force_stats(num_nodes, elements, axial_forces):
-    n = int(num_nodes)
-    sum_abs = np.zeros(n, dtype=float)
-    max_abs = np.zeros(n, dtype=float)
-    for i, (a, b) in elements.astype(int):
-        f = abs(axial_forces[i])
-        sum_abs[a] += f
-        sum_abs[b] += f
-        if f > max_abs[a]:
-            max_abs[a] = f
-        if f > max_abs[b]:
-            max_abs[b] = f
-    return sum_abs, max_abs
-
-
-def print_nodes_table(
-    nodes,
-    elements,
-    node_deg,
-    axial_forces,
-    node_deflection,
-    node_reactions,
-    top_n=10,
-):
-    Rnode = node_reactions
-    Rmag = np.sqrt((Rnode**2).sum(axis=1))
-
-    sum_abs, max_abs = node_incident_force_stats(nodes.shape[0], elements, axial_forces)
-
-    order = np.argsort(-Rmag)
-    print("\n===== NODES (1ª ORDEM) — RESULTANTE DE FORÇA =====")
-    print(
-        "rank | node | |R| (N) | Rx (N) | Ry (N) | Rz (N) | deg | sum|F| (N) | max|F| (N) | defl (mm)"
-    )
-    shown = 0
-    for idx in order:
-        if shown >= int(top_n):
-            break
-        i = int(idx)
-        r = float(Rmag[i])
-        if r <= 0 and np.isfinite(r):
-            continue
-        rx, ry, rz = Rnode[i, :]
-        print(
-            f"{shown + 1:>4d} | {i:>4d} | {r:>7.2f} | {rx:>7.2f} | {ry:>7.2f} | {rz:>7.2f} |"
-            f" {int(node_deg[i]):>3d} | {sum_abs[i]:>10.2f} | {max_abs[i]:>10.2f} | {1000.0 * node_deflection[i]:>8.3f}"
-        )
-        shown += 1
-
-
-# =========================
-# MAIN
-# =========================
 def main():
     best_position = None
     best_value = None
@@ -207,24 +131,24 @@ def main():
     if RUN_PSO:
         if ARTICLE_MODE:
             pso_kwargs = dict(
-                num_particles=100,
-                max_iterations=100,
-                w=0.9,
+                num_particles=10,
+                max_iterations=30,
+                w_inertia=0.9,
                 w_min=0.4,
                 inertia_scheme="nonlinear",
-                c1=1.4,
-                c2=1.8,
+                c1_cogn=1.4,
+                c2_soc=1.8,
             )
 
             best_position, best_value = run_article_mode(
-                int(N_RUNS),
+                N_RUNS,
                 objective_function,
                 dimensions,
                 bounds,
                 pso_kwargs,
                 var_names,
                 verbose=True,
-                plot=True,
+                plot=SHOW_ARTICLE_PLOTS,
             )
 
         else:
@@ -234,11 +158,11 @@ def main():
                 bounds,
                 num_particles=10,
                 max_iterations=100,
-                w=0.9,
+                w_inertia=0.9,
                 w_min=0.4,
                 inertia_scheme="nonlinear",
-                c1=1.4,
-                c2=1.8,
+                c1_cogn=1.4,
+                c2_soc=1.8,
             )
             best_position, best_value = pso.optimize(verbose=True)
 
@@ -248,7 +172,7 @@ def main():
             plot_single_convergence(pso)
             plt.show()
     else:
-        best_position = np.array(MANUAL_BEST_POSITION, dtype=float)
+        best_position = np.array(MANUAL_BEST_POSITION)
         best_value = np.nan
 
     if best_position is None or len(best_position) != 9:
@@ -288,7 +212,7 @@ def main():
     print("\n===== FABRICÁVEL (SEÇÕES) =====")
     print_sections(diam_o, diam_i)
 
-    total_len_sum = float(np.sum(fem_system.truss.element_length))
+    total_len_sum = np.sum(fem_system.truss.element_length)
     print(f"Total length (sum members) {total_len_sum:.2f} m")
     print(f"Mass (members only): {1000 * fem_system.truss.total_mass_members:.1f} g")
     print(f"Mass (joints est.): {1000 * fem_system.truss.total_mass_joints:.1f} g")

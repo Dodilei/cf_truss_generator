@@ -1,5 +1,5 @@
 import numpy as np
-from geometry import Geometry
+from core.geometry import Geometry
 
 
 # TODO FIX internal diameter is not monotonical
@@ -18,8 +18,8 @@ def make_fabricable(diam_o_init, diam_i_init):
 
 
 def parse_diams(diam_ext, widths):
-    diam_o_init = np.array(diam_ext, dtype=float)
-    diam_i_init = diam_o_init - np.array(widths, dtype=float)
+    diam_o_init = np.array(diam_ext)
+    diam_i_init = diam_o_init - np.array(widths)
 
     diam_i_init[diam_i_init < 0] = 0.0
 
@@ -106,9 +106,7 @@ class TrussSystem:
         ).sum(axis=1)
         self.element_length = np.sqrt(np.sum(self.dxyz**2, axis=1))
 
-        self.total_mass_members = float(
-            (self.element_length * self.element_area * float(self.rho)).sum()
-        )
+        self.total_mass_members = (self.element_length * self.element_area * self.rho).sum()
 
     def calc_joint_properties(self):
         element_diam_ext = self.element_diam_ext
@@ -131,4 +129,4 @@ class TrussSystem:
         self.bond_length = bond_length
         self.bond_area = np.pi * element_diam_ext * bond_length
 
-        self.total_mass_joints = float(mass_sleeve.sum())
+        self.total_mass_joints = mass_sleeve.sum()

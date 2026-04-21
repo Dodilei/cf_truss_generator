@@ -10,9 +10,7 @@ def show():
     plt.show()
 
 
-# =========================
-# HELPERS
-# =========================
+
 def get_cmap_safe(name="managua", fallback="viridis"):
     try:
         return matplotlib.colormaps.get_cmap(name)
@@ -20,7 +18,7 @@ def get_cmap_safe(name="managua", fallback="viridis"):
         return matplotlib.colormaps.get_cmap(fallback)
 
 
-def set_axes_equal_3d(ax, nodes):
+def set_axes_equal_3d(axis_3d, nodes):
     x = nodes[:, 0]
     y = nodes[:, 1]
     z = nodes[:, 2]
@@ -31,11 +29,11 @@ def set_axes_equal_3d(ax, nodes):
     mid_y = 0.5 * (y.max() + y.min())
     mid_z = 0.5 * (z.max() + z.min())
     max_range = max(x_range, y_range, z_range, 1e-12)
-    ax.set_xlim(mid_x - 0.5 * max_range, mid_x + 0.5 * max_range)
-    ax.set_ylim(mid_y - 0.5 * max_range, mid_y + 0.5 * max_range)
-    ax.set_zlim(mid_z - 0.5 * max_range, mid_z + 0.5 * max_range)
+    axis_3d.set_xlim(mid_x - 0.5 * max_range, mid_x + 0.5 * max_range)
+    axis_3d.set_ylim(mid_y - 0.5 * max_range, mid_y + 0.5 * max_range)
+    axis_3d.set_zlim(mid_z - 0.5 * max_range, mid_z + 0.5 * max_range)
     try:
-        ax.set_box_aspect((1, 1, 1))
+        axis_3d.set_box_aspect((1, 1, 1))
     except Exception:
         pass
 
@@ -63,8 +61,8 @@ def plot_deformed_truss_overlaid(
     nodes_def = nodes + U_reshaped
 
     # Cmap pra stress (simétrico ±max)
-    stresses = np.asarray(axial_stresses, dtype=float)
-    smax = float(np.max(np.abs(stresses)))
+    stresses = np.asarray(axial_stresses)
+    smax = np.max(np.abs(stresses))
     vmin, vmax = -smax, smax
     norm_stress = np.clip((stresses - vmin) / (vmax - vmin), 0.0, 1.0)
     cmap_stress = get_cmap_safe(
@@ -72,14 +70,14 @@ def plot_deformed_truss_overlaid(
     )  # Coolwarm pra comp(azul)-trac(laranja)
 
     fig = plt.figure(figsize=(12, 9))
-    ax = fig.add_subplot(111, projection="3d")
+    axis_3d = fig.add_subplot(111, projection="3d")
 
     # Original: cinza tracejado (alpha baixo)
     for elem in elements:
-        n1, n2 = int(elem[0]), int(elem[1])
+        n1, n2 = elem[0], elem[1]
         pA = nodes[n1]
         pB = nodes[n2]
-        ax.plot(
+        axis_3d.plot(
             [pA[0], pB[0]],
             [pA[1], pB[1]],
             [pA[2], pB[2]],
@@ -91,15 +89,15 @@ def plot_deformed_truss_overlaid(
         )
 
     # Nodes originais (pequenos, cinza)
-    ax.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], c="lightgray", s=20, alpha=0.7)
+    axis_3d.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], c="lightgray", s=20, alpha=0.7)
 
     # Deformada: sólida, colorida por stress
     for i, elem in enumerate(elements):
-        n1, n2 = int(elem[0]), int(elem[1])
+        n1, n2 = elem[0], elem[1]
         pA_def = nodes_def[n1]
         pB_def = nodes_def[n2]
         color = cmap_stress(norm_stress[i])
-        ax.plot(
+        axis_3d.plot(
             [pA_def[0], pB_def[0]],
             [pA_def[1], pB_def[1]],
             [pA_def[2], pB_def[2]],
@@ -110,7 +108,7 @@ def plot_deformed_truss_overlaid(
 
     # Nodes deformados (coloridos por def mag, s maior)
     def_mag = np.linalg.norm(U_reshaped, axis=1)
-    ax.scatter(
+    axis_3d.scatter(
         nodes_def[:, 0],
         nodes_def[:, 1],
         nodes_def[:, 2],
@@ -121,78 +119,74 @@ def plot_deformed_truss_overlaid(
     )  # Plasma pra mag def
 
     # Labels/Title
-    ax.set_xlabel("X (m)")
-    ax.set_ylabel("Y (m)")
-    ax.set_zlabel("Z (m)")
-    ax.set_title(
+    axis_3d.set_xlabel("X (m)")
+    axis_3d.set_ylabel("Y (m)")
+    axis_3d.set_zlabel("Z (m)")
+    axis_3d.set_title(
         f"{title}\n(Deformation scaled by {scale_factor}x; max def ~{np.max(def_mag):.1f} m)"
     )
-    ax.legend()
+    axis_3d.legend()
 
     # Equal axes + view (como seus plots)
-    set_axes_equal_3d(ax, nodes)
-    ax.view_init(elev=20, azim=-50)
-    ax.grid(True, alpha=0.3)
+    set_axes_equal_3d(axis_3d, nodes)
+    axis_3d.view_init(elev=20, azim=-50)
+    axis_3d.grid(True, alpha=0.3)
 
     # Colorbar pra stress
-    sm = cm.ScalarMappable(cmap=cmap_stress)
-    sm.set_array([vmin, vmax])
-    cbar = fig.colorbar(sm, ax=ax, shrink=0.8, pad=0.1)
+    scalar_map = cm.ScalarMappable(cmap=cmap_stress)
+    scalar_map.set_array([vmin, vmax])
+    cbar = fig.colorbar(scalar_map, ax=axis_3d, shrink=0.8, pad=0.1)
     cbar.set_label("Axial Stress (Pa)")
 
     plt.tight_layout()
     plt.show()
 
 
-# =========================
-# PLOTS
-# =========================
+
 def plot_structure_with_constraints_and_loads(
     nodes, elements, fixed_nodes, load_nodes, load_magnitudes, title
 ):
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection="3d")
+    axis_3d = fig.add_subplot(111, projection="3d")
 
-    ax.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], color="blue", s=50, label="Nodes")
+    axis_3d.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], color="blue", s=50, label="Nodes")
 
     for element in elements:
-        n1, n2 = int(element[0]), int(element[1])
+        n1, n2 = element[0], element[1]
         pA = nodes[n1]
         pB = nodes[n2]
-        ax.plot(
+        axis_3d.plot(
             [pA[0], pB[0]], [pA[1], pB[1]], [pA[2], pB[2]], "k-", linewidth=2, alpha=0.7
         )
 
     for node_idx in fixed_nodes:
-        p = nodes[int(node_idx)]
-        ax.scatter(
-            p[0],
-            p[1],
-            p[2],
+        point = nodes[node_idx]
+        axis_3d.scatter(
+            point[0],
+            point[1],
+            point[2],
             color="red",
             marker="s",
             s=100,
-            label=f"Fixed Node {int(node_idx)}",
+            label=f"Fixed Node {node_idx}",
         )
 
-    max_load = float(np.max(np.abs(load_magnitudes))) if len(load_magnitudes) else 0.0
+    max_load = np.max(np.abs(load_magnitudes)) if len(load_magnitudes) else 0.0
     arrow_scale = 0.05 / max_load if max_load != 0 else 0.1
 
     for (node_idx, dof_type), magnitude in zip(load_nodes, load_magnitudes):
-        node_idx = int(node_idx)
-        dof_type = int(dof_type)
-        p = nodes[node_idx]
+        point = nodes[node_idx]
         u, v, w = 0.0, 0.0, 0.0
         if dof_type == 0:
-            u = float(magnitude) * arrow_scale
+            u = magnitude * arrow_scale
         if dof_type == 1:
-            v = float(magnitude) * arrow_scale
+            v = magnitude * arrow_scale
         if dof_type == 2:
-            w = float(magnitude) * arrow_scale
-        ax.quiver(
-            p[0],
-            p[1],
-            p[2],
+            w = magnitude * arrow_scale
+        axis_3d.quiver(
+            point[0],
+            point[1],
+            point[2],
             u,
             v,
             w,
@@ -202,19 +196,19 @@ def plot_structure_with_constraints_and_loads(
             label=f"Load Node {node_idx} ({magnitude:.1f}N dof={dof_type})",
         )
 
-    ax.set_xlabel("X-coordinate (m)")
-    ax.set_ylabel("Y-coordinate (m)")
-    ax.set_zlabel("Z-coordinate (m)")
-    ax.set_title(title)
+    axis_3d.set_xlabel("X-coordinate (m)")
+    axis_3d.set_ylabel("Y-coordinate (m)")
+    axis_3d.set_zlabel("Z-coordinate (m)")
+    axis_3d.set_title(title)
 
-    handles, labels = ax.get_legend_handles_labels()
+    handles, labels = axis_3d.get_legend_handles_labels()
     unique_labels = list(dict.fromkeys(labels))
     unique_handles = [handles[labels.index(lbl)] for lbl in unique_labels]
-    ax.legend(unique_handles, unique_labels)
+    axis_3d.legend(unique_handles, unique_labels)
 
-    set_axes_equal_3d(ax, nodes)
-    ax.view_init(elev=20, azim=-50)
-    ax.grid(True)
+    set_axes_equal_3d(axis_3d, nodes)
+    axis_3d.view_init(elev=20, azim=-50)
+    axis_3d.grid(True)
     plt.show()
 
 
@@ -224,8 +218,8 @@ def plot_stress_and_buckling(
     cmap_stress = get_cmap_safe("managua", "viridis")
     cmap_sf = get_cmap_safe("managua", "viridis")
 
-    stresses = np.asarray(axial_stresses, dtype=float)
-    smax = float(np.max(np.abs(stresses))) if len(stresses) else 1.0
+    stresses = np.asarray(axial_stresses)
+    smax = np.max(np.abs(stresses)) if len(stresses) else 1.0
     vmin, vmax = -smax, +smax
     with np.errstate(divide="ignore", invalid="ignore"):
         norm_stress = (stresses - vmin) / (vmax - vmin)
@@ -233,86 +227,86 @@ def plot_stress_and_buckling(
     norm_stress = np.clip(norm_stress, 0.0, 1.0)
 
     fig = plt.figure(figsize=(20, 8))
-    ax1 = fig.add_subplot(121, projection="3d")
-    ax2 = fig.add_subplot(122, projection="3d")
+    axis_3d_left = fig.add_subplot(121, projection="3d")
+    axis_3d_right = fig.add_subplot(122, projection="3d")
 
     # (a) stress
-    ax1.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], color="black", s=20)
+    axis_3d_left.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], color="black", s=20)
     for i, element in enumerate(elements):
-        n1, n2 = int(element[0]), int(element[1])
+        n1, n2 = element[0], element[1]
         pA = nodes[n1]
         pB = nodes[n2]
-        ax1.plot(
+        axis_3d_left.plot(
             [pA[0], pB[0]],
             [pA[1], pB[1]],
             [pA[2], pB[2]],
-            color=cmap_stress(float(norm_stress[i])),
+            color=cmap_stress(norm_stress[i]),
             linewidth=2.5,
         )
-    ax1.set_xlabel("X-coordinate (m)")
-    ax1.set_ylabel("Y-coordinate (m)")
-    ax1.set_zlabel("Z-coordinate (m)")
-    ax1.set_title(title_left)
-    set_axes_equal_3d(ax1, nodes)
-    ax1.view_init(elev=20, azim=-50)
-    ax1.grid(True)
+    axis_3d_left.set_xlabel("X-coordinate (m)")
+    axis_3d_left.set_ylabel("Y-coordinate (m)")
+    axis_3d_left.set_zlabel("Z-coordinate (m)")
+    axis_3d_left.set_title(title_left)
+    set_axes_equal_3d(axis_3d_left, nodes)
+    axis_3d_left.view_init(elev=20, azim=-50)
+    axis_3d_left.grid(True)
 
-    sm1 = cm.ScalarMappable(cmap=cmap_stress)
-    sm1.set_array([vmin, vmax])
-    cbar1 = fig.colorbar(sm1, ax=ax1, pad=0.1, shrink=0.9, location="bottom")
+    scalar_map1 = cm.ScalarMappable(cmap=cmap_stress)
+    scalar_map1.set_array([vmin, vmax])
+    cbar1 = fig.colorbar(scalar_map1, ax=axis_3d_left, pad=0.1, shrink=0.9, location="bottom")
     cbar1.set_label("Axial Stress (Pa)")
 
     # (b) buckling
-    ax2.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], color="black", s=20)
+    axis_3d_right.scatter(nodes[:, 0], nodes[:, 1], nodes[:, 2], color="black", s=20)
     for i, element in enumerate(elements):
-        n1, n2 = int(element[0]), int(element[1])
+        n1, n2 = element[0], element[1]
         pA = nodes[n1]
         pB = nodes[n2]
-        sf = float(buckling_sf[i])
+        sf_val = buckling_sf[i]
 
-        if sf < 1.0:
+        if sf_val < 1.0:
             color = "orangered"
-        elif sf > 3.0:
+        elif sf_val > 3.0:
             color = "gray"
         else:
-            t = (sf - 1.0) / (3.0 - 1.0)
-            t = float(np.clip(t, 0.0, 1.0))
+            t = (sf_val - 1.0) / (3.0 - 1.0)
+            t = np.clip(t, 0.0, 1.0)
             color = cmap_sf(t)
 
-        ax2.plot(
+        axis_3d_right.plot(
             [pA[0], pB[0]], [pA[1], pB[1]], [pA[2], pB[2]], color=color, linewidth=2.5
         )
 
-    ax2.set_xlabel("X-coordinate (m)")
-    ax2.set_ylabel("Y-coordinate (m)")
-    ax2.set_zlabel("Z-coordinate (m)")
-    ax2.set_title(title_right)
-    set_axes_equal_3d(ax2, nodes)
-    ax2.view_init(elev=20, azim=-50)
-    ax2.grid(True)
+    axis_3d_right.set_xlabel("X-coordinate (m)")
+    axis_3d_right.set_ylabel("Y-coordinate (m)")
+    axis_3d_right.set_zlabel("Z-coordinate (m)")
+    axis_3d_right.set_title(title_right)
+    set_axes_equal_3d(axis_3d_right, nodes)
+    axis_3d_right.view_init(elev=20, azim=-50)
+    axis_3d_right.grid(True)
 
-    sm2 = cm.ScalarMappable(cmap=cmap_sf)
-    sm2.set_array([1.0, 3.0])
-    cbar2 = fig.colorbar(sm2, ax=ax2, pad=0.1, shrink=0.9, location="bottom")
+    scalar_map2 = cm.ScalarMappable(cmap=cmap_sf)
+    scalar_map2.set_array([1.0, 3.0])
+    cbar2 = fig.colorbar(scalar_map2, ax=axis_3d_right, pad=0.1, shrink=0.9, location="bottom")
     cbar2.set_label("Buckling Safety Factor (1 <= SF <= 3)")
 
     custom_lines = [
         Line2D([0], [0], color="orangered", lw=4, label="SF < 1 (Critical)"),
         Line2D([0], [0], color="gray", lw=4, label="SF > 3 (Safe)"),
     ]
-    ax2.legend(custom_lines, [cl.get_label() for cl in custom_lines])
+    axis_3d_right.legend(custom_lines, [cl.get_label() for cl in custom_lines])
 
     plt.show()
 
 
 def _nan_quantile(A, q):
-    A2 = np.array(A, dtype=float, copy=True)
+    A2 = np.array(A, copy=True)
     A2[~np.isfinite(A2)] = np.nan
     return np.nanquantile(A2, q, axis=0)
 
 
 def plot_convergence_band(best_value_history):
-    H = np.array(best_value_history, dtype=float)
+    H = np.array(best_value_history)
     it = np.arange(1, H.shape[1] + 1)
 
     med = _nan_quantile(H, 0.50)
@@ -333,7 +327,7 @@ def plot_convergence_band(best_value_history):
 
 
 def plot_diversity_band(diversity_history):
-    H = np.array(diversity_history, dtype=float)
+    H = np.array(diversity_history)
     it = np.arange(1, H.shape[1] + 1)
 
     med = np.median(H, axis=0)
@@ -353,16 +347,16 @@ def plot_diversity_band(diversity_history):
 
 
 def plot_parallel_coordinates_best(best_positions, best_values, bounds, var_names):
-    X = np.asarray(best_positions, dtype=float)  # (N, D)
-    y = np.asarray(best_values, dtype=float)
+    X = np.asarray(best_positions)  # (N, D)
+    y = np.asarray(best_values)
 
-    lb = np.array([b[0] for b in bounds], dtype=float)
-    ub = np.array([b[1] for b in bounds], dtype=float)
+    lb = np.array([b[0] for b in bounds])
+    ub = np.array([b[1] for b in bounds])
     span = ub - lb
     span[span == 0] = 1.0
     Xn = (X - lb) / span
 
-    best_idx = int(np.nanargmin(y))
+    best_idx = np.nanargmin(y)
     dims = X.shape[1]
     xax = np.arange(dims)
 
@@ -393,9 +387,9 @@ def plot_parallel_coordinates_best(best_positions, best_values, bounds, var_name
 def plot_boxplots_best(
     best_positions, best_values, bounds, var_names, zoom_quantiles=(5, 95), pad_frac=0.25
 ):
-    X = np.asarray(best_positions, dtype=float)  # (N, D)
-    y = np.asarray(best_values, dtype=float)
-    best_idx = int(np.nanargmin(y))
+    X = np.asarray(best_positions)  # (N, D)
+    y = np.asarray(best_values)
+    best_idx = np.nanargmin(y)
 
     dims = X.shape[1]
     ncols = 3
@@ -431,7 +425,7 @@ def plot_boxplots_best(
 
         if zoom_quantiles is not None:
             ql, qh = zoom_quantiles
-            allv = np.concatenate([data, np.array([X[best_idx, d]], dtype=float)])
+            allv = np.concatenate([data, np.array([X[best_idx, d]])])
             allv = allv[np.isfinite(allv)]
             if allv.size == 0:
                 ax.set_ylim(bounds[d][0], bounds[d][1])
@@ -465,9 +459,7 @@ def plot_boxplots_best(
     return fig
 
 
-# =========================
-# PLOTS — SINGLE RUN
-# =========================
+
 def plot_single_convergence(pso):
     it = np.arange(1, len(pso.gbest_value_history) + 1)
     plt.figure(figsize=(7, 4))

@@ -1,7 +1,7 @@
 from optimizer.pso import PSOEnsemble
 import numpy as np
 
-from visual import (
+from utils.visual import (
     plot_convergence_band,
     plot_diversity_band,
     plot_parallel_coordinates_best,
@@ -10,9 +10,7 @@ from visual import (
 )
 
 
-# =========================
-# ARTICLE MODE — RUN + PLOTS
-# =========================
+
 def run_article_mode(
     n_runs,
     objective_function,
@@ -34,7 +32,7 @@ def run_article_mode(
 
     best_position, best_value = pso_ensemble.optimize(verbose=verbose)
 
-    vals = np.array(pso_ensemble.rbest_value, dtype=float, copy=True)
+    vals = np.array(pso_ensemble.rbest_value, copy=True)
     vals[~np.isfinite(vals)] = np.nan
 
     if verbose:
@@ -56,16 +54,16 @@ def run_article_mode(
         )
         show()
 
-    return pso_ensemble.rbest_position, pso_ensemble.rbest_value
+    return pso_ensemble.gbest_position, pso_ensemble.gbest_value
 
 
 def print_article_summary(vals, best_position, var_names):
 
-    best = float(np.nanmin(vals))
-    worst = float(np.nanmax(vals))
-    mean = float(np.nanmean(vals))
-    std = float(np.nanstd(vals))
-    med = float(np.nanmedian(vals))
+    best = np.nanmin(vals)
+    worst = np.nanmax(vals)
+    mean = np.nanmean(vals)
+    std = np.nanstd(vals)
+    med = np.nanmedian(vals)
 
     print("\n===================== SUMMARY (ARTICLE MODE) =====================")
     print(f"N runs: {len(vals)}")
@@ -77,5 +75,5 @@ def print_article_summary(vals, best_position, var_names):
 
     print("Best position:")
     for name, v in zip(var_names, best_position):
-        print(f"  {name:>18s} = {float(v):.6e}")
+        print(f"  {name:>18s} = {v:.6e}")
     print("==================================================================\n")

@@ -8,22 +8,20 @@ def _get_ud_strengths(ud_mat, fallback_Xt=1.5e9, fallback_Xc=1.2e9):
     Xc = None
     for k in ["Xt", "X_t", "sigma1t", "S1t", "X1t"]:
         if hasattr(ud_mat, k):
-            Xt = float(getattr(ud_mat, k))
+            Xt = getattr(ud_mat, k)
             break
     for k in ["Xc", "X_c", "sigma1c", "S1c", "X1c"]:
         if hasattr(ud_mat, k):
-            Xc = float(getattr(ud_mat, k))
+            Xc = getattr(ud_mat, k)
             break
     if Xt is None or not np.isfinite(Xt) or Xt <= 0:
-        Xt = float(fallback_Xt)
+        Xt = fallback_Xt
     if Xc is None or not np.isfinite(Xc) or Xc <= 0:
-        Xc = float(fallback_Xc)
+        Xc = fallback_Xc
     return Xt, Xc
 
 
-# =========================
-# FAIL: TSAI-WU (UNIAXIAL) + BUCKLING
-# =========================
+
 def sf_tsaiwu_uniaxial(axial_stresses, ud_mat):
     """
     Tsai-Wu uniaxial (σ1=axial_stress, σ2=τ=0):
@@ -31,8 +29,8 @@ def sf_tsaiwu_uniaxial(axial_stresses, ud_mat):
     Resolve para k>0 em FI(kσ)=1.
     """
     Xt, Xc = _get_ud_strengths(ud_mat)
-    stresses = np.asarray(axial_stresses, dtype=float)
-    sf_tsaiwu = np.full_like(stresses, np.inf, dtype=float)
+    stresses = np.asarray(axial_stresses)
+    sf_tsaiwu = np.full_like(stresses, np.inf)
 
     F1 = 1.0 / Xt - 1.0 / Xc
     F11 = 1.0 / (Xt * Xc)
@@ -51,8 +49,8 @@ def sf_tsaiwu_uniaxial(axial_stresses, ud_mat):
     discriminant[discriminant < 0.0] = 0.0
     sqrt_disc = np.sqrt(discriminant)
 
-    sf_root1 = np.full_like(s_active, np.inf, dtype=float)
-    sf_root2 = np.full_like(s_active, np.inf, dtype=float)
+    sf_root1 = np.full_like(s_active, np.inf)
+    sf_root2 = np.full_like(s_active, np.inf)
 
     mask_quad = np.abs(quad_coeff) > 1e-18
     sf_root1[mask_quad] = (-lin_coeff[mask_quad] + sqrt_disc[mask_quad]) / (
@@ -65,7 +63,7 @@ def sf_tsaiwu_uniaxial(axial_stresses, ud_mat):
     # Fallback to linear solution if quad_coeff ~ 0 (e.g., if F11 is zero): lin_coeff*k = 1
     mask_linear = ~mask_quad
     lin_coeff_pure = lin_coeff[mask_linear]
-    sf_linear = np.full_like(lin_coeff_pure, np.inf, dtype=float)
+    sf_linear = np.full_like(lin_coeff_pure, np.inf)
     mask_valid_lin = np.abs(lin_coeff_pure) > 1e-18
     sf_linear[mask_valid_lin] = 1.0 / lin_coeff_pure[mask_valid_lin]
     sf_root1[mask_linear] = sf_linear

@@ -6,9 +6,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 
-# -------------------------
-# Material UD (lamina)
-# -------------------------
+
 @dataclass(frozen=True)
 class UDMaterial:
     # Propriedades elásticas (lamina ortotrópica) - plano de tensão
@@ -28,12 +26,10 @@ class UDMaterial:
     @property
     def nu21(self) -> float:
         # nu21 = nu12 * E2/E1
-        return float(self.nu12) * float(self.E2) / float(self.E1)
+        return self.nu12 * self.E2 / self.E1
 
 
-# -------------------------
-# CLT core
-# -------------------------
+
 def lamina_Q(mat: UDMaterial) -> np.ndarray:
     """
     Reduced stiffness matrix Q (3x3) para lamina ortotrópica (plano de tensão):
@@ -41,11 +37,11 @@ def lamina_Q(mat: UDMaterial) -> np.ndarray:
     [Q12 Q22  0 ]
     [ 0   0  Q66]
     """
-    E1 = float(mat.E1)
-    E2 = float(mat.E2)
-    nu12 = float(mat.nu12)
-    nu21 = float(mat.nu21)
-    G12 = float(mat.G12)
+    E1 = mat.E1
+    E2 = mat.E2
+    nu12 = mat.nu12
+    nu21 = mat.nu21
+    G12 = mat.G12
 
     den = 1.0 - nu12 * nu21
     if den <= 0:
@@ -56,22 +52,22 @@ def lamina_Q(mat: UDMaterial) -> np.ndarray:
     Q12 = nu12 * E2 / den
     Q66 = G12
 
-    Q = np.array([[Q11, Q12, 0.0],
+    Q_matrix = np.array([[Q11, Q12, 0.0],
                   [Q12, Q22, 0.0],
-                  [0.0, 0.0, Q66]], dtype=float)
-    return Q
+                  [0.0, 0.0, Q66]])
+    return Q_matrix
 
 
-def Qbar_from_Q(Q: np.ndarray, theta_deg: float) -> np.ndarray:
+def Qbar_from_Q(Q_matrix: np.ndarray, theta_deg: float) -> np.ndarray:
     """
     Transformação de Q -> Qbar para ângulo theta (graus), CLT padrão.
     Retorna Qbar (3x3).
     """
-    th = np.deg2rad(float(theta_deg))
+    th = np.deg2rad(theta_deg)
     c = np.cos(th)
     s = np.sin(th)
 
-    Q11, Q12, Q22, Q66 = float(Q[0, 0]), float(Q[0, 1]), float(Q[1, 1]), float(Q[2, 2])
+    Q11, Q12, Q22, Q66 = Q_matrix[0, 0], Q_matrix[0, 1], Q_matrix[1, 1], Q_matrix[2, 2]
 
     c2 = c * c
     s2 = s * s
@@ -90,7 +86,7 @@ def Qbar_from_Q(Q: np.ndarray, theta_deg: float) -> np.ndarray:
 
     Qbar = np.array([[Qbar11, Qbar12, Qbar16],
                      [Qbar12, Qbar22, Qbar26],
-                     [Qbar16, Qbar26, Qbar66]], dtype=float)
+                     [Qbar16, Qbar26, Qbar66]])
     return Qbar
 
 
@@ -104,11 +100,11 @@ def laminate_ABD(
     N = A*eps0 + B*kappa
     M = B*eps0 + D*kappa
 
-    Retorna: (A, B, D, h_total, z_coords)
+    Retorna: (A_matrix, B_matrix, D_matrix, h_thick, z_coords)
     z_coords tem tamanho (nplies+1), com z0=-h/2 ... zn=+h/2
     """
-    angles = np.array(list(angles_deg), dtype=float)
-    t = np.array(list(t_plies), dtype=float)
+    angles = np.array(list(angles_deg))
+    t = np.array(list(t_plies))
 
     if angles.size == 0:
         raise ValueError("Laminado inválido: sem plies.")
@@ -117,30 +113,30 @@ def laminate_ABD(
     if np.any(t <= 0):
         raise ValueError("Laminado inválido: espessura de ply <= 0.")
 
-    h = float(np.sum(t))
-    z = np.empty(angles.size + 1, dtype=float)
-    z[0] = -0.5 * h
+    h_thick = np.sum(t)
+    z = np.empty(angles.size + 1)
+    z[0] = -0.5 * h_thick
     for k in range(angles.size):
         z[k + 1] = z[k] + t[k]
 
-    Q = lamina_Q(mat)
-    A = np.zeros((3, 3), dtype=float)
-    B = np.zeros((3, 3), dtype=float)
-    D = np.zeros((3, 3), dtype=float)
+    Q_matrix = lamina_Q(mat)
+    A_matrix = np.zeros((3, 3))
+    B_matrix = np.zeros((3, 3))
+    D_matrix = np.zeros((3, 3))
 
     for k in range(angles.size):
-        Qbar = Qbar_from_Q(Q, float(angles[k]))
-        zk0 = float(z[k])
-        zk1 = float(z[k + 1])
+        Qbar = Qbar_from_Q(Q_matrix, angles[k])
+        zk0 = z[k]
+        zk1 = z[k + 1]
 
-        A += Qbar * (zk1 - zk0)
-        B += 0.5 * Qbar * (zk1**2 - zk0**2)
-        D += (1.0 / 3.0) * Qbar * (zk1**3 - zk0**3)
+        A_matrix += Qbar * (zk1 - zk0)
+        B_matrix += 0.5 * Qbar * (zk1**2 - zk0**2)
+        D_matrix += (1.0 / 3.0) * Qbar * (zk1**3 - zk0**3)
 
-    return A, B, D, h, z
+    return A_matrix, B_matrix, D_matrix, h_thick, z
 
 
-def effective_inplane_props_from_A(A: np.ndarray, h: float) -> Dict[str, float]:
+def effective_inplane_props_from_A(A_matrix: np.ndarray, h_thick: float) -> Dict[str, float]:
     """
     Propriedades efetivas in-plane aproximadas via A:
       a = inv(A)
@@ -150,27 +146,26 @@ def effective_inplane_props_from_A(A: np.ndarray, h: float) -> Dict[str, float]:
       nu_xy = -a12/a11
       nu_yx = -a12/a22
     """
-    h = float(h)
-    if h <= 0:
-        raise ValueError("h <= 0")
+    if h_thick <= 0:
+        raise ValueError("h_thick <= 0")
 
     try:
-        a = np.linalg.inv(A)
+        a = np.linalg.inv(A_matrix)
     except np.linalg.LinAlgError:
         return dict(Ex=np.nan, Ey=np.nan, Gxy=np.nan, nu_xy=np.nan, nu_yx=np.nan)
 
-    a11 = float(a[0, 0])
-    a22 = float(a[1, 1])
-    a12 = float(a[0, 1])
-    a66 = float(a[2, 2])
+    a11 = a[0, 0]
+    a22 = a[1, 1]
+    a12 = a[0, 1]
+    a66 = a[2, 2]
 
-    Ex = 1.0 / (a11 * h) if a11 != 0 else np.nan
-    Ey = 1.0 / (a22 * h) if a22 != 0 else np.nan
-    Gxy = 1.0 / (a66 * h) if a66 != 0 else np.nan
+    Ex = 1.0 / (a11 * h_thick) if a11 != 0 else np.nan
+    Ey = 1.0 / (a22 * h_thick) if a22 != 0 else np.nan
+    Gxy = 1.0 / (a66 * h_thick) if a66 != 0 else np.nan
     nu_xy = -a12 / a11 if a11 != 0 else np.nan
     nu_yx = -a12 / a22 if a22 != 0 else np.nan
 
-    return dict(Ex=float(Ex), Ey=float(Ey), Gxy=float(Gxy), nu_xy=float(nu_xy), nu_yx=float(nu_yx))
+    return dict(Ex=Ex, Ey=Ey, Gxy=Gxy, nu_xy=nu_xy, nu_yx=nu_yx)
 
 
 # -------------------------
@@ -180,13 +175,13 @@ def build_layup_from_angles(
     angles_deg: Iterable[float],
     t_ply: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    angles = np.array(list(angles_deg), dtype=float)
-    t_ply = float(t_ply)
+    angles = np.array(list(angles_deg))
+    t_ply = t_ply
     if angles.size == 0:
         raise ValueError("angles vazio.")
     if t_ply <= 0:
         raise ValueError("t_ply <= 0.")
-    t = np.full(angles.size, t_ply, dtype=float)
+    t = np.full(angles.size, t_ply)
     return angles, t
 
 
@@ -194,7 +189,7 @@ def build_symmetric_layup(
     half_angles_deg: Iterable[float],
     t_ply: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    half = np.array(list(half_angles_deg), dtype=float)
+    half = np.array(list(half_angles_deg))
     if half.size == 0:
         raise ValueError("half_angles vazio.")
     full = np.concatenate([half, half[::-1]], axis=0)
@@ -214,8 +209,8 @@ def build_layup_from_fractions(
     t_ply: espessura por ply (discretização)
     symmetric=True -> empilha metade e espelha (B ~ 0)
     """
-    t_total = float(t_total)
-    t_ply = float(t_ply)
+    t_total = t_total
+    t_ply = t_ply
 
     if t_total <= 0 or t_ply <= 0:
         raise ValueError("t_total e t_ply devem ser > 0.")
@@ -299,13 +294,13 @@ def laminate_effective_props(
     angles_deg: Iterable[float],
     t_plies: Iterable[float],
 ) -> Dict[str, float]:
-    A, B, D, h, z = laminate_ABD(angles_deg, t_plies, mat)
-    props = effective_inplane_props_from_A(A, h)
-    props.update(dict(h=float(h)))
+    A_matrix, B_matrix, D_matrix, h_thick, z = laminate_ABD(angles_deg, t_plies, mat)
+    props = effective_inplane_props_from_A(A_matrix, h_thick)
+    props.update(dict(h=h_thick))
     # B/D ficam disponíveis se você quiser usar depois
-    props["_A"] = A
-    props["_B"] = B
-    props["_D"] = D
+    props["_A"] = A_matrix
+    props["_B"] = B_matrix
+    props["_D"] = D_matrix
     props["_z"] = z
     return props
 
@@ -335,8 +330,8 @@ def tube_EG_from_layup_spec(
         return laminate_effective_props(mat, layup_spec["angles_deg"], layup_spec["t_plies"])
 
     if "angles_deg" in layup_spec and "t_ply" in layup_spec:
-        angles = np.array(layup_spec["angles_deg"], dtype=float)
-        t_ply = float(layup_spec["t_ply"])
+        angles = np.array(layup_spec["angles_deg"])
+        t_ply = layup_spec["t_ply"]
         if bool(layup_spec.get("symmetric", False)):
             # interpreta angles_deg como half-stack se symmetric=True
             angles, t = build_symmetric_layup(angles, t_ply)
