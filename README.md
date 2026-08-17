@@ -1,8 +1,55 @@
-# [EN] Carbon Fiber Truss Generator
+<div align="center">
+
+# Carbon Fiber Truss Generator
+### Generative Design & Structural Optimization Pipeline for CFRP Trusses
+
+[![License](https://img.shields.io/badge/License-GPLv3-lightgrey.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Solver](https://img.shields.io/badge/Solver-FEM%20Sparse%20(SciPy)-green)](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.spsolve.html)
+[![Optimization](https://img.shields.io/badge/Optimizer-Particle%20Swarm%20(PSO)-purple)](#implementation-details)
+
+[![Paper](https://img.shields.io/badge/Read%20Paper-CONEM%202026-orange?logo=read-the-docs&logoColor=white)](.docs/CONEM2026_0801.pdf) [![Citation](https://img.shields.io/badge/Citation-BibTex-green?logo=readme&logoColor=white)](#citation)
+
 
 This repository contains a Python-based generative design pipeline for generating, evaluating and optimizing carbon fiber composite truss structures. The implementation couples a geometry generator, a Finite Element Method (FEM) solver and a Particle Swarm Optimization (PSO) algorithm to find optimal geometric configurations that minimize mass while satisfying structural integrity and safety constraints.
 
+[**English Description**](#en-desc) • [**Descrição em Português**](#pt-desc)
+</div>
+
 ---
+<div align="center">
+  
+## Visual Gallery (Galeria de Imagens)
+
+<!-- FIGURE 1 BLOCK -->
+<p></p>
+<div align="center" style="margin-bottom: 50px;"> <!-- Increased gap after first block -->
+  <p style="margin: 0 0 5px 0; line-height: 1.2;"> <!-- Tightened paragraph margins -->
+    [EN] Figure 1: Axial stress and bucling safety factor distribution.<br>
+    <span style="display: inline-block; margin-top: 2px;">[PT] Figura 1: Distribuição de tensões axiais e fatores de segurança de flambagem.</span>
+  </p>
+  <img src=".docs/img/cftruss_analysis.png" alt="Stress & Buckling Analysis" width="85%" style="margin-top: 5px;"> <!-- Tight gap to image -->
+</div>
+<br></br>
+<!-- FIGURES 2 & 3 BLOCK -->
+<div align="center">
+  <p style="margin: 0 0 5px 0; line-height: 1.2;"> <!-- Tightened paragraph margins -->
+    [EN] Figures 2 and 3: Geometrical scheme of the truss & Visualization of the resulting deflection.<br>
+    <span style="display: inline-block; margin-top: 2px;">[PT] Figuras 2 e 3: Esquema geométrico da treliça & Apresentação da deformação resultante.</span>
+  </p>
+  <p align="center" style="margin: 5px 0 0 0;"> <!-- Tight gap to images -->
+    <img src=".docs/img/cftruss_scheme.png" alt="Truss Geometrical Scheme" width="48%" />
+    <img src=".docs/img/cftruss_deformed.png" alt="Deformed Truss Visualization" width="44.35%" />
+  </p>
+</div>
+</div>
+
+---
+
+# [EN] Carbon Fiber Truss Generator
+<a id="en-desc"></a>
+
+This repository contains a Python-based generative design pipeline for generating, evaluating and optimizing carbon fiber composite truss structures. The implementation couples a geometry generator, a Finite Element Method (FEM) solver and a Particle Swarm Optimization (PSO) algorithm to find optimal geometric configurations that minimize mass while satisfying structural integrity and safety constraints.
 
 ## Technical Architecture
 
@@ -15,8 +62,6 @@ The optimization layer utilizes a parallelized Particle Swarm Optimization (PSO)
 The structural evaluations rely on a simple truss element formulation, leveraging specific properties for Carbon Fiber Reinforced Polymers (CFRP):
 - **Sparse Matrix Formulation**: The global stiffness matrix assembly utilizes `scipy.sparse` (COO/CSR formats) for better memory footprints and fast linear system resolutions via `scipy.sparse.linalg`.
 - **Failure Criteria**: The stress states within each member are evaluated against the **Tsai-Wu failure criterion** and local Euler buckling margins, factoring in specialized orthotropic properties ($E_x, G_{xy}$) derived from the defined composite specifications.
-
----
 
 ## Implementation Details
 
@@ -38,10 +83,9 @@ The primary execution script manages the whole generation, evaluation and optimi
 --------------
 
 # [PT] Gerador de Estruturas Treliçadas de Compósito
+<a id="pt-desc"></a>
 
 Esse repositório consiste em um fluxo de design generativo em Python para construir, avaliar e otimizar estruturas treliçadas de compósito de fibra de carbono. A implementação une um gerador de geometria, um algorítimo de Elementos Finitos (FEM) e um otimizador por enxame de partículas (PSO) para encontrar configurações geométricas ótimas que minimizam a massa enquanto satisfazem critérios de segurança e integridade estrutural.
-
----
 
 ## Arquitetura Técnica
 
@@ -54,8 +98,6 @@ O módulo de otimização utiliza um algorítimo de solução paralela para a ot
 As avaliações estruturais são baseadas em uma formulação simples de elementos finitos para treliças, acrescentando propriedades específicas para compósitos de fibra de carbono (CFRP):
 - **Formulação por Matrizes Esparsas**: A montagem da matriz de rigidez global utiliza matrizes esparsas (`scipy.sparse`) para diminuir o custo de memória e permitir soluções rápidas do sistema linear via `scipy.sparse.linalg`.
 - **Critérios de Falha**: Os estados de tensão de cada elemento são avaliados através do **critério de falha de Tsai-Wu** e limites de flambagem de Euler (locais), utilizando propriedades ortotrópicas especializadas ($E_x, G_{xy}$) para o compósito específico definido.
-
----
 
 ## Detalhes da Implementação
 
@@ -73,3 +115,28 @@ O script principal de execução gere o processo completo de geração, avaliaç
 2. **Avaliação de Critérios**: É definida a função objetivo que, para cada estrutura candidata, mapeia o vetor de entrada para as características mecânicas e fatores de segurança da treliça. Isso inclui o cálculo de massa total e deformação, além da avaliação dos limites de segurança para Tsai-Wu, flambagem e integridade das conexões. 
 3. **Síntese da Solução Ideal**: Após a convergência, o script extrai o design ótimo e o analisa novamente. Nesse estágio são geradas as especificações de manufatura (e.g., diâmetro dos tubos e espessuras) e resume os resultados estruturais no envelope de operação.
 4. **Visualização de Resultados**: (Opcional) O processo conclui gerando gráficos de diagnóstico, incluindo distribuição de tensões, limites de flambagem, e uma visualização da estrutura deformada (estilo Walbrun) para verificar qualitativamente o desempenho mecânico da estrutura.
+
+---
+
+## Academic Publication
+
+This generative design framework and its structural formulation were presented and published at the **National Congress of Mechanical Engineering (CONEM 2026)**.
+
+* **Paper Title**: *Desenvolvimento de Framework Computacional em Python para Design e Otimização de Estruturas Treliçadas em Fibra de Carbono*
+* **Authors**: *Pedro Henrique Castro Alves*, *Maurício Menegatti Andrade*, *Livia Caetano de Andrade*, *Ismael Antônio Agostini*
+* **Conference**: CONEM 2026 – Congresso Nacional de Engenharia Mecânica
+* **Document**: [`[Read PDF]`](.docs/CONEM2026_0801.pdf)
+
+### Citation
+
+```bibtex
+@inproceedings{alves2026conem,
+  author    = {Alves, Pedro Henrique Castro and Andrade, Maur{\'{\i}}cio Menegatti and de Andrade, L{\'{\i}}via Caetano and Agostini, Ismael Ant{\^o}nio},
+  title     = {Desenvolvimento de Framework Computacional em {Python} para Design e Otimiza{\c{c}}{\~a}o de Estruturas Treli{\c{c}}adas em Fibra de Carbono},
+  booktitle = {Anais do XIII Congresso Nacional de Engenharia Mec{\^a}nica (CONEM 2026)},
+  year      = {2026},
+  month     = {aug},
+  publisher = {Associa{\c{c}}{\~a}o Brasileira de Engenharia e Ci{\^e}ncias Mec{\^a}nicas (ABCM)},
+  note      = {Artigo CONEM2026-0801}
+}
+```
